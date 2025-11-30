@@ -1,310 +1,157 @@
+# gui/main_window.py
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk, messagebox
 import threading
-from config import Config
+from gui.control_panel import ControlPanel
+from gui.traffic_canvas import TrafficCanvas
+from gui.statistics_panel import StatisticsPanel
 from traffic_simulation import TrafficSimulation
 from genetic_algorithm import GeneticAlgorithm
-from gui.traffic_canvas import TrafficCanvas
-from gui.control_panel import ControlPanel
-from gui.charts import ChartWindow
+from config import Config
 
 class MainWindow:
-    def __init__(self):
-        self.root = tk.Tk()
+    def __init__(self, root):
+        self.root = root
         self.root.title(Config.WINDOW_TITLE)
         self.root.geometry(f"{Config.WINDOW_WIDTH}x{Config.WINDOW_HEIGHT}")
         self.root.configure(bg=Config.COLOR_BG)
-        self.root.resizable(False, False)
-        
-        # Simulación y AG
+
         self.simulation = None
         self.ga = None
-        self.animation_running = False
-        
+
         self._create_layout()
-        self._setup_menu()
-        
+        self._create_menu()
+
     def _create_layout(self):
-        """Crea el layout principal"""
-        # Header
+        # === CABECERA ===
         header = tk.Frame(self.root, bg=Config.COLOR_PRIMARY, height=80)
         header.pack(fill=tk.X)
+        header.pack_propagate(False)
+
+        title = tk.Label(header, text="Sistema de Optimización de Tráfico", 
+                         font=("Arial", 24, "bold"), fg="white", bg=Config.COLOR_PRIMARY)
+        title.pack(expand=True)
         
-        title_label = tk.Label(
-            header,
-            text="🚦 Sistema de Optimización de Tráfico",
-            font=("Arial", 24, "bold"),
-            bg=Config.COLOR_PRIMARY,
-            fg="white"
-        )
-        title_label.pack(pady=20)
-        
-        subtitle_label = tk.Label(
-            header,
-            text="Simulación con Algoritmo Genético",
-            font=("Arial", 12),
-            bg=Config.COLOR_PRIMARY,
-            fg="white"
-        )
-        subtitle_label.pack()
-        
-        # Contenedor principal
-        main_container = tk.Frame(self.root, bg=Config.COLOR_BG)
-        main_container.pack(fill=tk.BOTH, expand=True)
-        
-        # Panel de control (izquierda)
-        self.control_panel = ControlPanel(
-            main_container,
-            callbacks={
-                'start': self.start_simulation,
-                'stop': self.stop_simulation,
-                'optimize': self.optimize_traffic,
-                'reset': self.reset_system
-            }
-        )
-        
-        # Canvas de simulación (derecha)
-        canvas_frame = tk.Frame(main_container, bg=Config.COLOR_BG)
-        canvas_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        
+        subtitle = tk.Label(header, text="Simulación con Algoritmo Genético", 
+                            font=("Arial", 14), fg="#bdc3c7", bg=Config.COLOR_PRIMARY)
+        subtitle.pack()
+
+        # === CONTENIDO PRINCIPAL ===
+        main_frame = tk.Frame(self.root, bg=Config.COLOR_BG)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Panel izquierdo - Controles
+        left_panel = tk.Frame(main_frame, bg=Config.COLOR_SECONDARY, width=300)
+        left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        left_panel.pack_propagate(False)
+
+        self.control_panel = ControlPanel(left_panel, self)  # ← pack ya se hace dentro del ControlPanel
+
+        # Canvas central
+        canvas_frame = tk.Frame(main_frame, bg=Config.CANVAS_BG)
+        canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
         self.traffic_canvas = TrafficCanvas(canvas_frame)
-        
-        # Barra de progreso (para optimización)
-        self.progress_frame = tk.Frame(canvas_frame, bg=Config.COLOR_BG)
-        self.progress_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        self.progress_label = tk.Label(
-            self.progress_frame,
-            text="",
-            bg=Config.COLOR_BG,
-            fg=Config.COLOR_TEXT,
-            font=("Arial", 10)
-        )
-        self.progress_label.pack()
-        
-        self.progress_bar = ttk.Progressbar(
-            self.progress_frame,
-            mode='determinate',
-            length=Config.CANVAS_WIDTH - 40
-        )
-        
-    def _setup_menu(self):
-        """Configura el menú de la aplicación"""
+        self.traffic_canvas.canvas.pack(fill=tk.BOTH, expand=True)
+
+        # Panel derecho - Estadísticas
+        right_panel = tk.Frame(main_frame, bg=Config.COLOR_SECONDARY, width=280)
+        right_panel.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 0))
+        right_panel.pack_propagate(False)
+
+        self.stats_panel = StatisticsPanel(right_panel)
+
+        # Barra de progreso (oculta al inicio)
+        self.progress_bar = ttk.Progressbar(self.root, mode='determinate', length=600)
+        self.progress_label = tk.Label(self.root, text="", fg="#00ff00", bg=Config.COLOR_BG, 
+                                       font=("Arial", 11, "bold"))
+
+    def _create_menu(self):
         menubar = tk.Menu(self.root)
+        
+        filemenu = tk.Menu(menubar, tearoff=0)
+        filemenu.add_command(label="Ver Gráfico de Optimización", command=self.show_fitness_graph)
+        filemenu.add_separator()
+        filemenu.add_command(label="Salir", command=self.root.quit)
+        
+        menubar.add_cascade(label="Archivo", menu=filemenu)
         self.root.config(menu=menubar)
-        
-        # Menú Archivo
-        file_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Archivo", menu=file_menu)
-        file_menu.add_command(label="Reiniciar", command=self.reset_system)
-        file_menu.add_separator()
-        file_menu.add_command(label="Salir", command=self.root.quit)
-        
-        # Menú Herramientas
-        tools_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Herramientas", menu=tools_menu)
-        tools_menu.add_command(label="Ver Gráficos AG", command=self.show_charts)
-        
-        # Menú Ayuda
-        help_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Ayuda", menu=help_menu)
-        help_menu.add_command(label="Instrucciones", command=self.show_instructions)
-        help_menu.add_command(label="Acerca de", command=self.show_about)
-    
+
+    def show_fitness_graph(self):
+        """Abre el gráfico desde el menú en cualquier momento"""
+        if hasattr(self, 'ga') and self.ga and hasattr(self.ga, 'history') and self.ga.history:
+            self.ga.show_graph()
+        else:
+            messagebox.showinfo("Gráfico de Fitness", "No hay datos de optimización aún.\nEjecuta 'Optimizar con AG' primero.")
+
     def start_simulation(self):
-        """Inicia la simulación"""
-        spawn_rate = self.control_panel.get_spawn_rate()
-        
-        self.simulation = TrafficSimulation(spawn_rate=spawn_rate)
+        if self.simulation and self.simulation.is_running:
+            return
+        vehicles = self.control_panel.get_vehicle_count()
+        self.simulation = TrafficSimulation(total_vehicles=vehicles)
         self.simulation.start()
-        
-        self.control_panel.update_state(True, False)
-        
-        # Iniciar animación
-        self.animation_running = True
+        self.control_panel.update_button_state(running=True)
         self.animate()
-        
-        messagebox.showinfo(
-            "Simulación Iniciada",
-            f"Simulación iniciada con {spawn_rate} vehículos/segundo.\nLos semáforos están desorganizados."
-        )
-    
+
     def stop_simulation(self):
-        """Detiene la simulación"""
         if self.simulation:
             self.simulation.stop()
-        
-        self.animation_running = False
-        self.control_panel.update_state(False, self.simulation.is_optimized if self.simulation else False)
-        
-        messagebox.showinfo("Simulación Detenida", "La simulación ha sido detenida.")
-    
+            self.control_panel.update_button_state(running=False)
+
+    def reset_simulation(self):
+        self.stop_simulation()
+        if self.simulation:
+            self.simulation.reset()
+        self.traffic_canvas.clear()
+        self.stats_panel.clear()
+        self.stats_panel.update_optimized(False)
+
     def optimize_traffic(self):
-        """Optimiza el tráfico con el algoritmo genético"""
         if not self.simulation or not self.simulation.is_running:
-            messagebox.showwarning("Advertencia", "Debe iniciar la simulación primero.")
+            messagebox.showwarning("Advertencia", "Primero inicia la simulación.")
             return
-        
+
         generations = self.control_panel.get_generations()
-        
-        # Mostrar barra de progreso
-        self.progress_bar.pack(pady=5)
+        self.ga = GeneticAlgorithm(num_intersections=6)  # ← Guardamos la instancia
+        self.progress_bar.pack(pady=8)
+        self.progress_label.pack(pady=2)
         self.progress_bar['value'] = 0
         self.progress_bar['maximum'] = generations
-        
-        # Deshabilitar botón
         self.control_panel.btn_optimize.config(state=tk.DISABLED)
-        
+        self.progress_label.config(text="Iniciando optimización...")
+
         def progress_callback(gen, total, fitness):
-            """Callback para actualizar progreso"""
             self.progress_bar['value'] = gen + 1
-            self.progress_label.config(
-                text=f"Optimizando... Generación {gen + 1}/{total} | Fitness: {fitness:.2f}"
-            )
+            self.progress_label.config(text=f"Generación {gen+1}/{total} → Fitness: {fitness:.1f}")
             self.root.update_idletasks()
-        
+
         def run_optimization():
-            """Ejecuta la optimización en un thread separado"""
-            # Datos de tráfico simulados
-            traffic_data = {
-                f"queue_{i}": 5 for i in range(6)
-            }
-            traffic_data.update({
-                f"flow_{i}": 10 for i in range(6)
-            })
-            
-            # Ejecutar AG
+            # DATOS REALES EN TIEMPO REAL
+            traffic_data = self.simulation.get_real_traffic_data()
             self.ga = GeneticAlgorithm(num_intersections=6)
             self.ga.generations = generations
             result = self.ga.optimize(traffic_data, callback=progress_callback)
-            
-            # Aplicar solución
+
+            # APLICAR SOLUCIÓN
             self.simulation.apply_optimization(result['best_solution'])
-            
-            # Actualizar UI
-            self.root.after(100, lambda: self._optimization_complete(result))
-        
-        # Iniciar optimización en thread
-        thread = threading.Thread(target=run_optimization)
-        thread.daemon = True
-        thread.start()
-    
+
+            self.root.after(0, lambda: self._optimization_complete(result))
+
+        threading.Thread(target=run_optimization, daemon=True).start()
+
     def _optimization_complete(self, result):
-        """Callback cuando termina la optimización"""
         self.progress_bar.pack_forget()
-        self.progress_label.config(text="")
-        
-        self.control_panel.update_state(True, True)
-        
-        messagebox.showinfo(
-            "Optimización Completada",
-            f"¡Optimización exitosa!\n\nFitness Final: {result['best_fitness']:.2f}\n\n"
-            f"Los semáforos han sido reorganizados para mejorar el flujo."
-        )
-        
-        # Mostrar gráficos automáticamente
-        self.show_charts()
-    
-    def reset_system(self):
-        """Reinicia todo el sistema"""
-        self.animation_running = False
-        
-        if self.simulation:
-            self.simulation.reset()
-        
-        self.ga = None
-        self.traffic_canvas.clear()
-        
-        self.control_panel.update_state(False, False)
-        self.control_panel.update_stats({
-            'total_vehicles': 0,
-            'total_spawned': 0,
-            'completed': 0,
-            'waiting': 0,
-            'avg_wait_time': 0,
-            'time': 0
-        })
-        
-        messagebox.showinfo("Sistema Reiniciado", "El sistema ha sido reiniciado completamente.")
-    
-    def show_charts(self):
-        """Muestra la ventana de gráficos"""
-        if not self.ga or not self.ga.history:
-            messagebox.showwarning(
-                "Sin Datos",
-                "No hay datos de optimización para mostrar.\nEjecute la optimización primero."
-            )
-            return
-        
-        ChartWindow(self.root, self.ga)
-    
-    def show_instructions(self):
-        """Muestra las instrucciones"""
-        instructions = """
-🚦 INSTRUCCIONES DEL SISTEMA
+        self.progress_label.pack_forget()
+        self.control_panel.btn_optimize.config(state=tk.NORMAL)
+        messagebox.showinfo("¡ÉXITO!", 
+                            f"Optimización completada\nFitness final: {result['best_fitness']:.0f}\n"
+                            "¡Ola verde activada!")
+        self.stats_panel.update_optimized(True)
 
-1. Ajuste los parámetros de simulación:
-   - Vehículos/segundo: Controla cuántos carros aparecen
-   - Generaciones: Iteraciones del algoritmo genético
-
-2. Haga clic en "Iniciar Simulación"
-   Los vehículos comenzarán a aparecer con semáforos desorganizados
-
-3. Observe el tráfico:
-   - Círculos azules: vehículos en movimiento
-   - Círculos rojos: vehículos esperando
-   - Semáforos brillan en verde (avanzar) o rojo (detener)
-
-4. Cuando vea congestión, use "Optimizar con AG"
-   El algoritmo genético encontrará la mejor configuración
-
-5. Los semáforos se reorganizarán automáticamente
-   El flujo mejorará y las esperas disminuirán
-
-6. Use "Ver Gráficos AG" para analizar la evolución del fitness
-"""
-        messagebox.showinfo("Instrucciones", instructions)
-    
-    def show_about(self):
-        """Muestra información sobre la aplicación"""
-        about = """
-🚦 Sistema de Optimización de Tráfico
-Versión 2.0
-
-Desarrollado con:
-- Python 3.x
-- Tkinter (Interfaz Gráfica)
-- Algoritmo Genético
-
-Características:
-✓ Simulación de tráfico en tiempo real
-✓ Optimización con algoritmo genético
-✓ Visualización interactiva
-✓ Gráficos de evolución
-✓ Semáforos inteligentes
-
-© 2024 - Sistema de IA para Gestión de Tráfico
-"""
-        messagebox.showinfo("Acerca de", about)
-    
     def animate(self):
-        """Loop de animación"""
-        if not self.animation_running or not self.simulation:
-            return
-        
-        # Actualizar simulación
-        self.simulation.update(1/Config.FPS)
-        
-        # Dibujar en el canvas
-        self.simulation.draw(self.traffic_canvas)
-        
-        # Actualizar estadísticas
-        stats = self.simulation.get_statistics()
-        self.control_panel.update_stats(stats)
-        
-        # Programar siguiente frame
-        self.root.after(Config.UPDATE_INTERVAL, self.animate)
-    
-    def run(self):
-        """Inicia la aplicación"""
-        self.root.mainloop()
+        if self.simulation and self.simulation.is_running:
+            dt = Config.UPDATE_INTERVAL / 1000.0
+            self.simulation.update(dt)
+            self.traffic_canvas.draw(self.simulation)
+            self.stats_panel.update(self.simulation.get_statistics())
+            self.root.after(Config.UPDATE_INTERVAL, self.animate)
