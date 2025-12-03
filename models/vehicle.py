@@ -1,3 +1,4 @@
+# models/vehicle.py - VERSIÓN CORREGIDA
 import random
 import math
 from config import Config
@@ -8,7 +9,7 @@ class Vehicle:
         self.lane_start = lane_start
         self.lane_end = lane_end
         self.spawn_time = spawn_time
-        self.simulation = simulation  # Necesario para acceder a current_time y semáforos
+        self.simulation = simulation
         
         # Posición inicial y final
         self.x, self.y = self._get_spawn_position()
@@ -57,16 +58,20 @@ class Vehicle:
         """Devuelve el semáforo más cercano en dirección de avance"""
         nearest = None
         min_dist = float('inf')
+        
         for light in self.simulation.traffic_lights:
             dist = math.hypot(light.x - self.x, light.y - self.y)
+            
             if dist < 80:  # Solo si está cerca
                 # Proyección: solo si la intersección está adelante
                 to_light_x = light.x - self.x
                 to_light_y = light.y - self.y
                 dot = to_light_x * self.direction[0] + to_light_y * self.direction[1]
+                
                 if dot > 0 and dist < min_dist:
                     min_dist = dist
                     nearest = light
+        
         return nearest
 
     def update(self, dt):
@@ -83,28 +88,30 @@ class Vehicle:
         must_stop = False
 
         if light:
-            current_state = light.update_state(self.simulation.current_time)
+            # Obtener estados de AMBAS direcciones
+            ns_state, ew_state = light.get_states(self.simulation.current_time)
+            
             going_ns = self.is_going_north_south()
+            distance_to_light = math.hypot(self.x - light.x, self.y - light.y)
 
-            # Lógica realista: 
-            # - Si el carro va N-S → solo pasa si el semáforo NS está en verde
-            # - Si va E-O → solo pasa si el semáforo EO está en verde
+            # Lógica CORRECTA:
+            # - Si va N-S → verifica el estado NS
+            # - Si va E-O → verifica el estado EW
             if going_ns:
-                if light.is_north_south and current_state == "green":
-                    must_stop = False
-                else:
+                # Va vertical (Norte-Sur)
+                if ns_state in ["red", "yellow"]:
                     must_stop = True
             else:
-                if not light.is_north_south and current_state == "green":
-                    must_stop = False
-                else:
+                # Va horizontal (Este-Oeste)
+                if ew_state in ["red", "yellow"]:
                     must_stop = True
 
-        if must_stop and math.hypot(self.x - light.x, self.y - light.y) < 40:
-            self.waiting = True
-            self.speed = 0
-            self.wait_time += dt
-            return
+            # Detenerse si está cerca de la intersección
+            if must_stop and distance_to_light < 35:
+                self.waiting = True
+                self.speed = 0
+                self.wait_time += dt
+                return
 
         # Si no hay que parar → avanzar
         self.waiting = False
@@ -124,11 +131,19 @@ class Vehicle:
                 fill=color, outline="white", width=2
             )
             # Ventanas
-            canvas.create_rectangle(self.x - 8, self.y - 6, self.x + 8, self.y + 6, fill="#2c3e50")
+            canvas.create_rectangle(
+                self.x - 8, self.y - 6,
+                self.x + 8, self.y + 6,
+                fill="#2c3e50"
+            )
         else:  # Vertical
             canvas.create_rectangle(
                 self.x - 8, self.y - 15,
                 self.x + 8, self.y + 15,
                 fill=color, outline="white", width=2
             )
-            canvas.create_rectangle(self.x - 6, self.y - 8, self.x + 6, self.y + 8, fill="#2c3e50")
+            canvas.create_rectangle(
+                self.x - 6, self.y - 8,
+                self.x + 6, self.y + 8,
+                fill="#2c3e50"
+            )

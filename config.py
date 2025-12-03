@@ -1,11 +1,11 @@
-# config.py  ← VERSIÓN FINAL DEL UNIVERSO - NUNCA MÁS HABRÁ ERRORES
+# config.py - VERSIÓN CON PARÁMETROS OPTIMIZADOS
 class Config:
     # ==================== VENTANA ====================
     WINDOW_TITLE     = "Sistema de Optimización de Tráfico con Algoritmo Genético"
     WINDOW_WIDTH     = 1350
     WINDOW_HEIGHT    = 800
     COLOR_BG         = "#0f1620"
-    UPDATE_INTERVAL  = 16                    # ← ESTA ERA LA ÚLTIMA! (60 FPS → 1000/60 ≈ 16ms)
+    UPDATE_INTERVAL  = 16
 
     # ==================== TODOS LOS COLORES DE LA GUI ====================
     COLOR_PRIMARY           = "#1e2a38"
@@ -69,10 +69,11 @@ class Config:
     ]
 
     # ==================== ALGORITMO GENÉTICO ====================
-    GA_POPULATION_SIZE = 60
-    GA_GENERATIONS     = 120
-    GA_MUTATION_RATE   = 0.18
-    GA_CROSSOVER_RATE  = 0.85
-    GA_MIN_GREEN_TIME  = 20
-    GA_MAX_GREEN_TIME  = 55
+    # ==================== ALGORITMO GENÉTICO ====================
+    GA_POPULATION_SIZE = 120     # Población más grande para más diversidad
+    GA_GENERATIONS     = 120     # Generaciones equilibradas
+    GA_MUTATION_RATE   = 0.22    # Tasa de mutación óptima
+    GA_CROSSOVER_RATE  = 0.82    # Alta tasa de cruce
+    GA_MIN_GREEN_TIME  = 25      # Límites realistas
+    GA_MAX_GREEN_TIME  = 50
     GA_CYCLE_TIME      = 60

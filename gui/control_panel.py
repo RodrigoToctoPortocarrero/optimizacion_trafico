@@ -2,7 +2,7 @@
 import tkinter as tk
 from tkinter import ttk
 from config import Config
-
+#control_panel.py
 class ControlPanel:
     def __init__(self, parent, main_window):
         self.main_window = main_window
